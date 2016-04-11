@@ -1,0 +1,301 @@
+---
+title: "Assignment1-Coursera-Reproducible Science"
+author: "Janina F"
+date: "April 11, 2016"
+output: html_document
+---
+This assignment makes use of data from a personal activity monitoring device.
+ This device collects data at 5 minute intervals through out the day. The data
+ consists of two months of data from an anonymous individual collected during
+ the months of October and November, 2012 and include the number of steps taken
+ in 5 minute intervals each day.
+ 
+ The data for this assignment can be downloaded from the course web site:
+ 
+ Dataset: Activity monitoring data [52K] The variables included in this dataset
+ are:
+ 
+ steps: Number of steps taking in a 5-minute interval (missing values are coded
+ as NA)
+ date: The date on which the measurement was taken in YYYY-MM-DD
+ format interval: Identifier for the 5-minute interval in which measurement was
+ taken 
+
+The dataset is stored in a comma-separated-value (CSV) file and there
+ are a total of 17,568 observations in this dataset.
+
+
+install.packages("downloader", lib="/Library/Frameworks/R.framework/Versions/3.2/Resources/library")
+#   Code for reading in the dataset and/or processing the data   
+```{r, echo=TRUE}
+
+library(downloader)
+
+fileURL<- 'https://github.com/janinaf/RepData_PeerAssessment1/blob/master/activity.zip'
+download(fileURL, dest="/Volumes/DataDrive/Dropbox/Coursera-DataScience/ReproducibleScience/activity.zip", mode="wb") 
+```
+### unzip the file 
+```{r, echo=TRUE}
+
+activityData<- read.csv('/Volumes/DataDrive/Dropbox/Coursera-DataScience/ReproducibleScience/activity.csv', sep=',', header = TRUE)
+```
+
+# Histogram of the total number of steps taken each day   
+
+        ###calculate total steps/day
+```{r, echo=TRUE}        
+totalSteps<-with(activityData, tapply(steps, date, sum, na.rm=TRUE))
+```        
+        ###extract labels of interest
+```{r, echo=TRUE}        
+a<-unlist(attr(totalSteps, 'dimnames'))[c(1, 10, 20, 30, 40, 50, 61)]
+```        
+        ###create and label the plot
+```{r, echo=TRUE}        
+plot((1:length(totalSteps)), totalSteps, xaxt = 'n', xlab='date', ylab='Frequency', main = 'Total number of steps per day', "h")
+axis(
+        side = 1, at = c(1, 10,20,30,40,50,61), 
+        labels = c(a)
+)
+```
+
+
+# Mean and median number of steps taken each day      ########################
+
+        ###extract these values in the two corresponding vectors
+```{r, echo=TRUE} 
+meanSteps<-with(activityData, tapply(steps, date, mean, na.rm=TRUE))
+medianSteps<-with(activityData, tapply(steps, date, median, na.rm=TRUE))
+```
+
+#   Time series plot of the average number of steps taken ########################
+
+```{r, echo=TRUE} 
+timeSeriesSteps<-with(activityData, tapply(steps, interval, mean, na.rm=TRUE))
+```
+        ###create and label the plot
+```{r, echo=TRUE} 
+plot((1:length(timeSeriesSteps)), timeSeriesSteps, xlab='interval', ylab='mean number of steps', main = 'Average daily activity pattern', "l")
+```
+#   The 5-minute interval that, on average, contains the maximum number of steps #############
+```{r, echo=TRUE} 
+maxInterval=which.max(timeSeriesSteps)
+print(maxInterval)
+```
+
+#   Code to describe and show a strategy for imputing missing data   ######################
+
+        ##  1. Calculate and report the total number of missing values in the dataset (i.e. the total number of rows with 𝙽𝙰s)
+```{r, echo=TRUE}
+totalMissing<-sum(is.na(activityData$steps))
+```
+
+        #  2. Devise a strategy for filling in all of the missing values in the dataset.
+
+### Use information from: http://www.r-bloggers.com/imputing-missing-data-with-r-mice-package/
+###                       https://www.jstatsoft.org/article/view/v045i03
+###                       http://www.stefvanbuuren.nl/publications/Flexible%20multivariate%20-%20TNO99054%201999.pdf
+###                       http://www.gmw.rug.nl/~huisman/md/EPP5_2010.pdf
+
+install.packages("mice", lib="/Library/Frameworks/R.framework/Versions/3.2/Resources/library")
+### impute based on predictive mean matching
+###  for info regarding this method see http://statisticalhorizons.com/predictive-mean-matching
+```{r, echo=TRUE}
+library(mice)
+```
+Code creates 10 different data sets (parameter is m in the call to mice
+function below) with imputed values replacing missing values in steps variable
+reveals pattern of missing data; only steps variable has missing data 
+```{r, echo=TRUE}
+md.pattern(activityData)
+```
+        ###run imputation
+```{r, echo=TRUE}
+tempData<-mice(activityData, m =10, maxit=50, meth='pmm', seed=500)
+summary(tempData)
+```
+      #each of the complete data sets can be stored to be accessed separately  
+###not run
+### this would store each imputed data set into a separate data frame
+### for (i in 1:tempData$m) {assign(paste('completeActivityData', i, sep=''), complete(tempData,i))}
+### more efficient is to store all the imputed data sets into a single data frame
+
+```{r, echo=TRUE}
+completeActivityData<-list() 
+```
+###left hand side of the expression
+```{r, echo=TRUE}
+lhs  <- paste("completeActivityData[[",    1:tempData$m, ']]' ,   sep="")
+```
+###right hand part of the expression
+```{r, echo=TRUE}
+rhs  <- paste("complete(tempData, ",1:tempData$m,")", sep="")
+```
+###combine left and right hand sides and evaluate the expression
+```{r, echo=TRUE}
+eq   <- paste(paste(lhs, rhs, sep="<-"), collapse=";")
+eval(parse(text=eq))
+```
+At this point, each imputed data set is stored in the list completeActivityData; each element of the list is an imputed data set
+
+## 3. Histogram of the total number of steps taken each day after missing values are imputed
+         
+### Make a histogram of the total number of steps taken each day after imputation
+
+       ###calculate total steps/day
+```{r, echo=TRUE}
+completeTotalSteps<-list()
+for (j in 1:tempData$m) {
+completeTotalSteps[[j]]<-with(completeActivityData[[j]],tapply(steps, date, sum, na.rm=TRUE))
+}
+```
+        ### extract labels of interest
+```{r, echo=TRUE}
+b<-unlist(attr(completeTotalSteps[[j]], 'dimnames'))[c(1, 10, 20, 30, 40, 50, 61)]
+```
+        ### create and label the plot
+```{r, echo=TRUE}
+plot((1:length(completeTotalSteps[[j]])), completeTotalSteps[[j]], xaxt = 'n', xlab='date', ylab='Frequency', main = 'Total number of steps per day in imputed data set', "h")
+axis(
+        side = 1, at = c(1, 10,20,30,40,50,61), 
+        labels = c(b)
+)
+
+```
+        #### for quick comparison, for each imputation, plot the original and imputed data sets 
+```{r, echo=TRUE}        
+par(mar = c(4, 4, .8, .8), mfrow=c(4,3))
+plot((1:length(totalSteps)), totalSteps, xaxt = 'n', xlab='date', ylab='Frequency', main = 'Total number of steps per day', "h")
+axis(
+        side = 1, at = c(1, 10,20,30,40,50,61), 
+        labels = c(a)
+)
+
+
+for (k in 1:tempData$m){
+        plot( (1:length(completeTotalSteps[[k]])) , completeTotalSteps[[k]], xaxt = 'n', xlab='date', ylab='Frequency', 
+               main = paste('Imputed total number of steps per day', k), "h")
+        axis(
+                side = 1, at = c(1, 10,20,30,40,50,61), 
+                labels = c(a)
+        )
+}
+``` 
+        ### Calculate and report the mean and median total number of steps taken per day.
+       
+```{r, echo=TRUE}
+completeMeanSteps<-list()
+completeMedianSteps<-list()
+
+for (l in 1:tempData$m){
+completeMeanSteps[[l]]<-with(completeActivityData[[l]], tapply(steps, date, mean, na.rm=TRUE))
+completeMedianSteps[[l]]<-with(completeActivityData[[l]], tapply(steps, date, median, na.rm=TRUE))
+}
+```
+        ### Do these values differ from the estimates from the first part of the
+        ### assignment? 
+```{r, echo=TRUE}        
+par(mar = c(4, 4, .8, .8), mfrow=c(2,1))
+plot((1:length(meanSteps)), meanSteps, xaxt = 'n', xlab='date', ylab='mean number of steps/day', main = 'Average daily number of steps ', "l", col='black', lwd = 4)
+axis(
+        side = 1, at = c(1, 10,20,30,40,50,61), 
+        labels = c(a)
+)
+for (p in 1:tempData$m){
+        lines( (1:length(completeMeanSteps[[p]])) , completeMeanSteps[[p]] , type = 'l', col ='green')
+        
+}
+Corner_text <- function(text, location="topleft"){
+        legend(location,legend=text, bty ="n", pch=NA) 
+}
+Corner_text(text=paste("Missing data points in original data:", sum(is.na(meanSteps)) ))
+
+
+plot((1:length(medianSteps)), medianSteps, xaxt = 'n', xlab='date', ylab='median number of steps/day', main = 'Median daily number of steps ', "l", col='black', lwd = 4)
+axis(
+        side = 1, at = c(1, 10,20,30,40,50,61), 
+        labels = c(a)
+)
+for (p in 1:tempData$m){
+        lines( (1:length(completeMedianSteps[[p]])) , completeMedianSteps[[p]] , type = 'l', col ='red')
+        
+}
+Corner_text <- function(text, location="topleft"){
+        legend(location,legend=text, bty ="n", pch=NA) 
+}
+Corner_text(text=paste("Missing data points in original data:", sum(is.na(medianSteps)) ))
+``` 
+The 8 missing values in the original data set are replaced by imputed data points; the rest of the values remain unchanged.
+The overall average of both measurements increases, while the variance decreases
+However, the median is not informative for this because the value of zero (when the person is not moving, 
+or when the device perhaps malfunctions) is dominant
+
+### What is the impact of imputing missing data on the estimates of
+### the total dailyumber of steps?
+```{r, echo=TRUE}
+par(mfrow=c(1,1))
+plot((1:length(totalSteps)), totalSteps, xaxt = 'n', xlab='date', ylab='Frequency', 
+     main = 'Total number of steps per day', type = "l", col = 'black', lwd = 4)
+axis(
+        side = 1, at = c(1, 10,20,30,40,50,61), 
+        labels = c(a)
+)
+
+
+for (k in 1:tempData$m){
+        lines( (1:length(completeTotalSteps[[k]])) , completeTotalSteps[[k]], type = "l", col = 'blue')
+       
+}
+Corner_text <- function(text, location="topleft"){
+        legend(location,legend=text, bty ="n", pch=NA) 
+}
+Corner_text(text=paste("Missing data points in original data:", sum(is.na(totalSteps)) ))
+```
+As in the case of the mean and median, the missing values are replaced with imputed values, while the rest of the data set is unchanged
+The overeall total number of steps increases, the variance decreases
+
+
+## 4. Panel plot comparing the average number of steps taken per 5-minute interval across weekdays and weekends ########
+        #Create a new factor variable in the dataset with two levels – “weekday” and
+        #“weekend” indicating whether a given date is a weekday or weekend day.
+        # the variable day has 7 levels, Mon to Sun
+###choose one of 10 available complete data sets
+```{r, echo=TRUE}
+completeActivityData1<-completeActivityData[[1]]
+completeActivityData1$day<-weekdays(as.POSIXlt(completeActivityData1$date))
+```
+        ### combine some levels
+        ### use package plyr
+```{r, echo=TRUE}
+library (plyr)
+
+completeActivityData1$day <- mapvalues(completeActivityData1$day, from = c("Monday", "Tuesday", 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'), 
+                             to = c("weekday", 'weekday', 'weekday', 'weekday', 'weekday', 'weekend', 'weekend' )) 
+```
+       ### Make a panel plot containing a time series plot (i.e. 𝚝𝚢𝚙𝚎 = "𝚕") of the
+       ###minute interval (x-axis) and the average number of steps taken, averaged
+       ### across all weekday days or weekend days (y-axis).
+
+```{r, echo=TRUE}
+timeSeriesSteps2<-with(completeActivityData1, tapply(steps, list(interval,day), mean, na.rm=TRUE))
+
+library(lattice)
+library(data.table)
+
+f<-as.numeric(unlist(attr(timeSeriesSteps2, 'dimnames'))[c(1:288)])
+timeSeriesSteps3<-data.frame(timeSeriesSteps2,f)
+finalTimeSeries<-melt(timeSeriesSteps3, id = 'f', measure = c('weekday', 'weekend')) 
+str(finalTimeSeries)
+
+finalTimeSeries$f <- as.numeric(finalTimeSeries$f)
+
+xyplot(value ~ f| variable, finalTimeSeries, 
+       layout = c(1, 2), 
+       type = 'l', 
+       xlab = 'Interval', ylab = 'Number of steps', 
+       xlim= c(-100, 2500)
+        )
+       
+```
+
+
